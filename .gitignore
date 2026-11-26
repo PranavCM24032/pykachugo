@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Environment variables
+.env*
+
+# Distribution
+dist/
+
+# TypeScript
+*.tsbuildinfo
+*.tscov
+
+# IDE
+.vscode/
+.idea/
+
+# Push work directory
+.push-work/
+
+# Supabase gen output
+supabase/functions/*
+
+# Vercel
+.vercel
+
+# Debug
+.debug/
+
+# Swagger UI
+swagger/
+
+# Production build
+/.next/
