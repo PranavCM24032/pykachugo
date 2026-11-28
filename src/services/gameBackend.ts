@@ -3568,78 +3568,38 @@ export async function fetchAdminLogs(
 
 export async function adminResetAllData(
   adminKey: string,
-  clearCustomCatalog = false
+  _clearCustomCatalog = false
 ): Promise<number> {
-  lastAdminDeltaEpoch = 0;
-  lastAdminDeltaCursorIso = null;
   const curEpoch = Math.max(1, Number(localStorage.getItem(STORAGE_KEYS.gameEpoch) || 1));
-  let nextEpoch = Math.min(1000000, curEpoch + 1);
-
   const supabaseClient = isBrowserOnline() ? getSupabaseClient() : null;
   const adminCreds = getStoredAdminCredentials(adminKey);
-  if (supabaseClient) {
-    let handledViaRpc = false;
-    if (adminCreds && !unavailableRpcs.has('admin_reset_all_data')) {
-      try {
-        const rpcRes = await withPromiseTimeout(
-          supabaseClient.rpc('admin_reset_all_data', {
-            p_email: adminCreds.email,
-            p_password: adminCreds.password,
-            p_clear_catalog: clearCustomCatalog,
-          }),
-          10000,
-          'Supabase admin_reset_all_data RPC'
-        );
-        if (!rpcRes.error && typeof rpcRes.data === 'number') {
-          nextEpoch = Math.max(nextEpoch, Math.floor(rpcRes.data));
-          handledViaRpc = true;
-        } else if (rpcRes.error) {
-          if (isRpcMissingError(rpcRes.error)) {
-            markRpcUnavailable('admin_reset_all_data');
-          } else {
-            throw new Error(rpcRes.error.message);
-          }
-        }
-      } catch (err) {
-        if (err instanceof Error && /unauthorized/i.test(err.message)) {
-          throw err;
-        }
-        console.warn('[Supabase] Reset RPC error:', err);
-      }
-    }
-
-    if (!handledViaRpc) {
-      try {
-        const metaRes = await withPromiseTimeout(
-          supabaseClient.from('game_meta').select('epoch').eq('id', 1).maybeSingle(),
-          4000,
-          'Supabase reset meta'
-        );
-        const remoteEpoch = Number(metaRes.data?.epoch || curEpoch);
-        nextEpoch = Math.min(1000000, Math.max(nextEpoch, Math.floor(remoteEpoch) + 1));
-
-        const ops: PromiseLike<{ error: { message: string } | null }>[] = [
-          supabaseClient.from('puzzle_logs').delete().neq('id', ''),
-          supabaseClient.from('team_progress').delete().neq('tid', ''),
-          supabaseClient.from('team_registrations').delete().neq('registration_id', ''),
-          supabaseClient
-            .from('game_meta')
-            .upsert({ id: 1, epoch: nextEpoch, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-        ];
-        if (clearCustomCatalog) {
-          ops.push(supabaseClient.from('teams').delete().neq('tid', ''));
-          ops.push(supabaseClient.from('memes').delete().neq('memeid', ''));
-          ops.push(supabaseClient.from('puzzles').delete().gt('id', 0));
-        }
-        await withPromiseTimeout(Promise.all(ops), 10000, 'Supabase reset');
-      } catch (err) {
-        console.warn('[Supabase] Reset error:', err);
-      }
-    }
+  if (!supabaseClient) throw new Error('Connect to the event database before clearing logs.');
+  if (!adminCreds) throw new Error('Admin credentials are unavailable. Sign in again and retry.');
+  if (unavailableRpcs.has('admin_reset_all_data')) {
+    throw new Error('The log reset RPC is unavailable. Apply the updated supabase/schema.sql, then retry.');
   }
 
-  wipeAllLocalGameStorage(nextEpoch, clearCustomCatalog);
-  return nextEpoch;
+  const rpcRes = await withPromiseTimeout(
+    supabaseClient.rpc('admin_reset_all_data', {
+      p_email: adminCreds.email,
+      p_password: adminCreds.password,
+      p_clear_catalog: false,
+    }),
+    10000,
+    'Supabase log reset RPC'
+  );
+  if (rpcRes.error) {
+    if (isRpcMissingError(rpcRes.error)) {
+      markRpcUnavailable('admin_reset_all_data');
+      throw new Error('The log reset RPC is missing from Supabase. Apply the updated supabase/schema.sql, then retry.');
+    }
+    throw new Error(rpcRes.error.message);
+  }
+  if (typeof rpcRes.data !== 'number') throw new Error('Supabase did not confirm that logs were cleared.');
+
+  lastAdminDeltaEpoch = 0;
+  lastAdminDeltaCursorIso = null;
+  return Math.max(curEpoch, Math.floor(rpcRes.data));
 }
 
 export async function adminNewStartSolvedOnly(

@@ -206,7 +206,6 @@ export const AdminDashboard: React.FC = () => {
   const [confirmMode, setConfirmMode] = useState<
     'none' | 'new_start' | 'reset_1' | 'reset_2'
   >('none');
-  const [clearCustomCatalog, setClearCustomCatalog] = useState(false);
   const [resetPasswordInput, setResetPasswordInput] = useState('');
   const [resetPasswordError, setResetPasswordError] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -225,7 +224,6 @@ export const AdminDashboard: React.FC = () => {
     confirmDialogRef,
     () => {
       if (resetting) return;
-      setClearCustomCatalog(false);
       setResetPasswordInput('');
       setResetPasswordError('');
       setConfirmMode('none');
@@ -1001,16 +999,12 @@ export const AdminDashboard: React.FC = () => {
       setSystemStateKind('error');
       setLastUpdatedText('Clearing event data...');
 
-      const nextEpoch = await adminResetAllData(adminKey, clearCustomCatalog);
+      const nextEpoch = await adminResetAllData(adminKey);
       nextSinceRowRef.current = 2;
       lastPollEpochRef.current = nextEpoch;
       setLiveLogs([]);
       setTeamProgressRows([]);
       setTablePage(1);
-      if (clearCustomCatalog) {
-        await reloadCatalog(adminKey);
-      }
-      setClearCustomCatalog(false);
       setSystemStatusText('Reset complete');
       setSystemStateKind('ok');
       setLastUpdatedText('Event data cleared');
@@ -1022,7 +1016,7 @@ export const AdminDashboard: React.FC = () => {
       console.error('Reset failed:', err);
       setSystemStatusText('Reset failed');
       setSystemStateKind('error');
-      setLastUpdatedText('Permission or network error');
+        setLastUpdatedText(err instanceof Error ? err.message : 'Could not clear event logs');
     } finally {
       setResetting(false);
     }
@@ -1236,28 +1230,16 @@ export const AdminDashboard: React.FC = () => {
               {confirmMode === 'new_start'
                 ? 'Refresh Telemetry Feed?'
                 : confirmMode === 'reset_1'
-                  ? 'Reset Event Data?'
+                    ? 'Clear Event Logs?'
                   : 'Confirm Permanent Reset'}
             </h3>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
               {confirmMode === 'new_start'
                 ? 'Reloads live telemetry logs from the backend for the current session.'
                 : confirmMode === 'reset_1'
-                  ? 'Clears all telemetry logs, team scores, hint usage, and player progress across local storage and Supabase.'
-                  : 'Every team’s saved score, progress, and logs will be erased and the event epoch will advance. This action cannot be undone.'}
+                  ? 'Deletes leaderboard (L1, L2, L3) and registration log entries. Team registrations, scores, progress, and catalog data stay intact.'
+                  : 'Leaderboard and registration log entries will be permanently deleted. Team registrations, scores, progress, and catalog data stay intact.'}
             </p>
-            {(confirmMode === 'reset_1' || confirmMode === 'reset_2') && (
-              <label className="mt-4 flex items-start gap-2.5 rounded-lg border border-slate-800 bg-[#090D16] p-3 text-xs text-slate-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={clearCustomCatalog}
-                  disabled={resetting}
-                  onChange={(e) => setClearCustomCatalog(e.target.checked)}
-                  className="mt-0.5 accent-rose-500"
-                />
-                <span>Also clear custom Creator Studio edits (teams, puzzles &amp; memes)</span>
-              </label>
-            )}
             {confirmMode === 'reset_2' && (
               <div className="mt-4 space-y-1.5">
                 <label
@@ -1291,7 +1273,6 @@ export const AdminDashboard: React.FC = () => {
                 type="button"
                 disabled={resetting}
                 onClick={() => {
-                  setClearCustomCatalog(false);
                   setResetPasswordInput('');
                   setResetPasswordError('');
                   setConfirmMode('none');
@@ -1315,7 +1296,7 @@ export const AdminDashboard: React.FC = () => {
                     ? 'Continue'
                     : resetting
                       ? 'Verifying...'
-                      : 'Reset Everything'}
+                      : 'Clear Event Logs'}
               </button>
             </div>
           </form>
@@ -1435,7 +1416,7 @@ export const AdminDashboard: React.FC = () => {
                 className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-500/10 disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Reset Event Data</span>
+                <span>Clear Event Logs</span>
               </button>
             </div>
 

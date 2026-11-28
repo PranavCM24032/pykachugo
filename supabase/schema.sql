@@ -1215,32 +1215,17 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_next_epoch INTEGER;
+  v_epoch INTEGER;
 BEGIN
   PERFORM public._assert_admin(p_email, p_password);
 
+  -- This button clears the event log feed only. Registrations, scores,
+  -- progress, catalog data, and the current epoch are preserved.
   DELETE FROM public.puzzle_logs;
-  DELETE FROM public.team_progress;
-  DELETE FROM public.team_registrations;
 
-  IF p_clear_catalog THEN
-    DELETE FROM public.teams;
-    DELETE FROM public.memes;
-    DELETE FROM public.puzzles;
-  END IF;
-
-  INSERT INTO public.game_meta (id, epoch, catalog_version, updated_at)
-  VALUES (1, 2, CASE WHEN p_clear_catalog THEN 2 ELSE 1 END, NOW())
-  ON CONFLICT (id) DO UPDATE SET
-    epoch = LEAST(1000000, public.game_meta.epoch + 1),
-    catalog_version = CASE
-      WHEN p_clear_catalog THEN public.game_meta.catalog_version + 1
-      ELSE public.game_meta.catalog_version
-    END,
-    updated_at = NOW()
-  RETURNING epoch INTO v_next_epoch;
-
-  RETURN COALESCE(v_next_epoch, 2);
+  SELECT GREATEST(1, COALESCE(epoch, 1)) INTO v_epoch
+  FROM public.game_meta WHERE id = 1;
+  RETURN COALESCE(v_epoch, 1);
 END;
 $$;
 
